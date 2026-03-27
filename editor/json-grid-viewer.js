@@ -12,6 +12,7 @@ class JsonGridViewer {
     // Setup initial content for the webview
 		this.webviewPanel.webview.options = {
 			enableScripts: true,
+			retainContextWhenHidden: true,
 		}
 
 		this.webviewPanel.webview.html = this.getHtmlForWebview()
@@ -28,6 +29,12 @@ class JsonGridViewer {
 			switch (msg.type) {
 				case 'ready':
 					this.updateWebview()
+					break;
+				case 'edit':
+					this.applyEdit( msg )
+					break;
+				case 'rename-key':
+					this.applyRenameKey( msg )
 					break;
 			}
     })
@@ -84,6 +91,106 @@ class JsonGridViewer {
 			doc
 		})
   }
+
+	async applyEdit( msg ) {
+		let jsonDoc
+		let value
+
+		try {
+			jsonDoc = hjson.parse( this.document.getText() )
+			value = hjson.parse( msg.value )
+		} catch (error) {
+			vscode.window.showErrorMessage( `Invalid JSON input: ${error.message}` )
+			return
+		}
+
+		try {
+			if ( msg.path.length === 0 ) {
+				jsonDoc = value
+			} else {
+				const parent = this.getValueAtPath( jsonDoc, msg.path.slice( 0, -1 ) )
+				parent[msg.path[msg.path.length - 1]] = value
+			}
+
+			await this.replaceDocument( jsonDoc )
+		} catch (error) {
+			vscode.window.showErrorMessage( `Could not update JSON: ${error.message}` )
+		}
+	}
+
+	async applyRenameKey( msg ) {
+		const oldKey = msg.path[msg.path.length - 1]
+		const parentPath = msg.path.slice( 0, -1 )
+		const nextKey = msg.nextKey.trim()
+
+		if ( !nextKey ) {
+			vscode.window.showErrorMessage( 'Property name cannot be empty.' )
+			return
+		}
+
+		if ( nextKey === oldKey ) {
+			return
+		}
+
+		let jsonDoc
+		try {
+			jsonDoc = hjson.parse( this.document.getText() )
+		} catch (error) {
+			vscode.window.showErrorMessage( `Could not rename property: ${error.message}` )
+			return
+		}
+
+		const parent = this.getValueAtPath( jsonDoc, parentPath )
+		if ( !parent || Array.isArray( parent ) || typeof parent !== 'object' ) {
+			vscode.window.showErrorMessage( 'Property rename is only supported inside JSON objects.' )
+			return
+		}
+
+		if ( !Object.prototype.hasOwnProperty.call( parent, oldKey ) ) {
+			vscode.window.showErrorMessage( `Property "${oldKey}" was not found.` )
+			return
+		}
+
+		if ( Object.prototype.hasOwnProperty.call( parent, nextKey ) ) {
+			vscode.window.showErrorMessage( `Property "${nextKey}" already exists.` )
+			return
+		}
+
+		const renamed = {}
+		Object.keys( parent ).forEach( key => {
+			renamed[key === oldKey ? nextKey : key] = parent[key]
+		} )
+
+		if ( parentPath.length === 0 ) {
+			jsonDoc = renamed
+		} else {
+			const grandParent = this.getValueAtPath( jsonDoc, parentPath.slice( 0, -1 ) )
+			grandParent[parentPath[parentPath.length - 1]] = renamed
+		}
+
+		await this.replaceDocument( jsonDoc )
+	}
+
+	getValueAtPath( root, path ) {
+		return path.reduce( ( value, segment ) => {
+			if ( value === null || value === undefined ) {
+				throw new Error( `Path segment "${segment}" could not be resolved.` )
+			}
+			return value[segment]
+		}, root )
+	}
+
+	async replaceDocument( value ) {
+		const edit = new vscode.WorkspaceEdit()
+		edit.replace( this.document.uri, this.getFullDocumentRange(), hjson.stringify( value ) )
+		await vscode.workspace.applyEdit( edit )
+	}
+
+	getFullDocumentRange() {
+		const lastLine = Math.max( this.document.lineCount - 1, 0 )
+		const lastChar = this.document.lineAt( lastLine ).text.length
+		return new vscode.Range( 0, 0, lastLine, lastChar )
+	}
   
   // remove any listeners
   cleanup() {
