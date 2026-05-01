@@ -82,7 +82,7 @@ class JsonGridViewer {
 	updateWebview() {
 		let doc
 		try {
-			doc = hjson.parse( this.document.getText() )
+			doc = this.parseDocument()
 		} catch (error) {
 			return
 		}
@@ -90,14 +90,14 @@ class JsonGridViewer {
 			type: 'update',
 			doc
 		})
-  }
+	}
 
 	async applyEdit( msg ) {
 		let jsonDoc
 		let value
 
 		try {
-			jsonDoc = hjson.parse( this.document.getText() )
+			jsonDoc = this.parseDocument()
 			value = hjson.parse( msg.value )
 		} catch (error) {
 			vscode.window.showErrorMessage( `Invalid JSON input: ${error.message}` )
@@ -134,7 +134,7 @@ class JsonGridViewer {
 
 		let jsonDoc
 		try {
-			jsonDoc = hjson.parse( this.document.getText() )
+			jsonDoc = this.parseDocument()
 		} catch (error) {
 			vscode.window.showErrorMessage( `Could not rename property: ${error.message}` )
 			return
@@ -182,8 +182,46 @@ class JsonGridViewer {
 
 	async replaceDocument( value ) {
 		const edit = new vscode.WorkspaceEdit()
-		edit.replace( this.document.uri, this.getFullDocumentRange(), hjson.stringify( value ) )
+		edit.replace( this.document.uri, this.getFullDocumentRange(), this.stringifyDocument( value ) )
 		await vscode.workspace.applyEdit( edit )
+	}
+
+	parseDocument() {
+		const text = this.document.getText()
+		if ( !this.isJsonlDocument() ) {
+			return hjson.parse( text )
+		}
+
+		return text
+			.split( /\r?\n/ )
+			.map( ( line, index ) => ({
+				line: line.trim(),
+				lineNumber: index + 1,
+			}) )
+			.filter( entry => entry.line )
+			.map( entry => {
+				try {
+					return hjson.parse( entry.line )
+				} catch (error) {
+					throw new Error( `Line ${entry.lineNumber}: ${error.message}` )
+				}
+			} )
+	}
+
+	stringifyDocument( value ) {
+		if ( !this.isJsonlDocument() ) {
+			return hjson.stringify( value )
+		}
+
+		if ( !Array.isArray( value ) ) {
+			throw new Error( 'JSONL document root must be an array.' )
+		}
+
+		return value.map( item => JSON.stringify( item ) ).join( '\n' )
+	}
+
+	isJsonlDocument() {
+		return this.document.uri.fsPath.toLowerCase().endsWith( '.jsonl' )
 	}
 
 	getFullDocumentRange() {

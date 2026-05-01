@@ -37,6 +37,9 @@
         "selector": [
           {
             "filenamePattern": "*.json"
+          },
+          {
+            "filenamePattern": "*.jsonl"
           }
         ],
         "priority": "option"
