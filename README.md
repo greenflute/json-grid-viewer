@@ -1,3 +1,4 @@
+[![No Maintenance Intended](http://unmaintained.tech/badge.svg)](http://unmaintained.tech/)
 **[DEPRECATED]** Please use https://github.com/greenflute/tiny-grid-viewer
 
 # json-grid-viewer
