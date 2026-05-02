@@ -1,3 +1,5 @@
+**[DEPRECATED]** Please use https://github.com/greenflute/tiny-grid-viewer
+
 # json-grid-viewer
 Cloned from dutchigor:json-grid-viewer, this extension allows you get a better overview of the content in a JSON file by showing it in a resizable grid.
 - Columns are resizable.
